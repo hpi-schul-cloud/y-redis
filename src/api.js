@@ -1,16 +1,18 @@
-import * as Y from 'yjs'
-import * as redis from 'redis'
-import * as map from 'lib0/map'
-import * as decoding from 'lib0/decoding'
-import * as awarenessProtocol from 'y-protocols/awareness'
+import { transformStreamMessagesReply } from '@redis/client/dist/lib/commands/generic-transformers.js'
+import { transformReply } from '@redis/client/dist/lib/commands/XAUTOCLAIM.js'
+import { Redis } from 'ioredis'
 import * as array from 'lib0/array'
-import * as random from 'lib0/random'
-import * as number from 'lib0/number'
-import * as promise from 'lib0/promise'
-import * as math from 'lib0/math'
-import * as protocol from './protocol.js'
+import * as decoding from 'lib0/decoding'
 import * as env from 'lib0/environment'
 import * as logging from 'lib0/logging'
+import * as map from 'lib0/map'
+import * as math from 'lib0/math'
+import * as number from 'lib0/number'
+import * as promise from 'lib0/promise'
+import * as random from 'lib0/random'
+import * as awarenessProtocol from 'y-protocols/awareness'
+import * as Y from 'yjs'
+import * as protocol from './protocol.js'
 
 const logWorker = logging.createModuleLogger('@y/redis/api/worker')
 const logApi = logging.createModuleLogger('@y/redis/api')
@@ -30,16 +32,32 @@ export const isSmallerRedisId = (a, b) => {
   return a1n < b1n || (a1n === b1n && number.parseInt(a2) < number.parseInt(b2))
 }
 
+const normalizeStreamMessagesReply = (/** @type {any[]} */ streamReply) => {
+  const streamReplyRes = streamReply?.map((item) => {
+    // @ts-ignore
+    const [name, messages] = item
+    return {
+      name,
+      messages: transformStreamMessagesReply(messages)
+    }
+  })
+
+  return streamReplyRes
+}
+
 /**
  * @param {import('@redis/client/dist/lib/commands/generic-transformers.js').StreamsMessagesReply} streamReply
  * @param {string} prefix
  */
 const extractMessagesFromStreamReply = (streamReply, prefix) => {
+
+  // @ts-ignore
+  const streamReplyRes = normalizeStreamMessagesReply(streamReply)
   /**
    * @type {Map<string, Map<string, { lastId: string, messages: Array<Uint8Array> }>>}
-   */
-  const messages = new Map()
-  streamReply?.forEach(docStreamReply => {
+  */
+ const messages = new Map()
+ streamReplyRes?.forEach(docStreamReply => {
     const { room, docid } = decodeRedisRoomStreamName(docStreamReply.name.toString(), prefix)
     const docMessages = map.setIfUndefined(
       map.setIfUndefined(
@@ -84,9 +102,14 @@ const decodeRedisRoomStreamName = (rediskey, expectedPrefix) => {
  */
 export const createApiClient = async (store, redisPrefix) => {
   const a = new Api(store, redisPrefix)
-  await a.redis.connect()
   try {
-    await a.redis.xGroupCreate(a.redisWorkerStreamName, a.redisWorkerGroupName, '0', { MKSTREAM: true })
+    await a.redis.xgroup(
+      'CREATE',
+      a.redisWorkerStreamName,
+      a.redisWorkerGroupName,
+      '0',
+      'MKSTREAM'
+    )
   } catch (e) { }
   return a
 }
@@ -96,7 +119,7 @@ export class Api {
    * @param {import('./storage.js').AbstractStorage} store
    * @param {string} prefix
    */
-  constructor (store, prefix) {
+  constructor(store, prefix) {
     this.store = store
     this.prefix = prefix
     this.consumername = random.uuidv4()
@@ -111,82 +134,63 @@ export class Api {
     this.redisWorkerStreamName = this.prefix + ':worker'
     this.redisWorkerGroupName = this.prefix + ':worker'
     this._destroyed = false
-    this.redis = redis.createClient({
-      url: redisUrl,
-      // scripting: https://github.com/redis/node-redis/#lua-scripts
-      scripts: {
-        addMessage: redis.defineScript({
-          NUMBER_OF_KEYS: 1,
-          SCRIPT: `
-            if redis.call("EXISTS", KEYS[1]) == 0 then
-              redis.call("XADD", "${this.redisWorkerStreamName}", "*", "compact", KEYS[1])
-              redis.call("XREADGROUP", "GROUP", "${this.redisWorkerGroupName}", "pending", "STREAMS", "${this.redisWorkerStreamName}", ">")
-            end
-            redis.call("XADD", KEYS[1], "*", "m", ARGV[1])
-          `,
-          /**
-           * @param {string} key
-           * @param {Buffer} message
-           */
-          transformArguments (key, message) {
-            return [key, message]
-          },
-          /**
-           * @param {null} x
-           */
-          transformReply (x) {
-            return x
-          }
-        }),
-        xDelIfEmpty: redis.defineScript({
-          NUMBER_OF_KEYS: 1,
-          SCRIPT: `
-            if redis.call("XLEN", KEYS[1]) == 0 then
-              redis.call("DEL", KEYS[1])
-            end
-          `,
-          /**
-           * @param {string} key
-           */
-          transformArguments (key) {
-            return [key]
-          },
-          /**
-           * @param {null} x
-           */
-          transformReply (x) {
-            return x
-          }
-        })
-      }
-    })
+
+    this.redis = new Redis(redisUrl)
+
+    this.redis.defineCommand('addMessage', {
+      numberOfKeys: 1,
+      lua: `
+        if redis.call("EXISTS", KEYS[1]) == 0 then
+          redis.call("XADD", "${this.redisWorkerStreamName}", "*", "compact", KEYS[1])
+          redis.call("XREADGROUP", "GROUP", "${this.redisWorkerGroupName}", "pending", "STREAMS", "${this.redisWorkerStreamName}", ">")
+        end
+        redis.call("XADD", KEYS[1], "*", "m", ARGV[1])
+      `,
+    });
+
+    this.redis.defineCommand('xDelIfEmpty', {
+      numberOfKeys: 1,
+      lua: `
+        if redis.call("XLEN", KEYS[1]) == 0 then
+          redis.call("DEL", KEYS[1])
+        end
+      `,
+    });
   }
+
 
   /**
    * @param {Array<{key:string,id:string}>} streams streamname-clock pairs
    * @return {Promise<Array<{ stream: string, messages: Array<Uint8Array>, lastId: string }>>}
    */
-  async getMessages (streams) {
+  async getMessages(streams) {
     if (streams.length === 0) {
       await promise.wait(50)
       return []
     }
-    const reads = await this.redis.xRead(
-      redis.commandOptions({ returnBuffers: true }),
-      streams,
-      { BLOCK: 1000, COUNT: 1000 }
-    )
+
+     const reads = await this.redis.xreadBuffer(
+       "COUNT", 1000,
+       "BLOCK", 1000,
+       "STREAMS",
+       ...streams.map(stream => stream.key),
+       ...streams.map(stream => stream.id),
+      )
+
+      // @ts-ignore
+      const streamReplyRes = normalizeStreamMessagesReply(reads)
     /**
      * @type {Array<{ stream: string, messages: Array<Uint8Array>, lastId: string }>}
      */
     const res = []
-    reads?.forEach(stream => {
-      res.push({
-        stream: stream.name.toString(),
-        messages: protocol.mergeMessages(stream.messages.map(message => message.message.m).filter(m => m != null)),
-        lastId: array.last(stream.messages).id.toString()
-      })
-    })
+    streamReplyRes?.forEach(stream => {
+       res.push({
+         stream: stream.name.toString(),
+         // @ts-ignore
+         messages: protocol.mergeMessages(stream.messages.map(message => message.message.m).filter(m => m != null)),
+         lastId: array.last(stream.messages).id.toString()
+       })
+     })
     return res
   }
 
@@ -195,7 +199,7 @@ export class Api {
    * @param {string} docid
    * @param {Buffer} m
    */
-  addMessage (room, docid, m) {
+  addMessage(room, docid, m) {
     // handle sync step 2 like a normal update message
     if (m[0] === protocol.messageSync && m[1] === protocol.messageSyncStep2) {
       if (m.byteLength < 4) {
@@ -204,6 +208,7 @@ export class Api {
       }
       m[1] = protocol.messageSyncUpdate
     }
+    // @ts-ignore
     return this.redis.addMessage(computeRedisRoomStreamName(room, docid, this.prefix), m)
   }
 
@@ -211,7 +216,7 @@ export class Api {
    * @param {string} room
    * @param {string} docid
    */
-  async getStateVector (room, docid = '/') {
+  async getStateVector(room, docid = '/') {
     return this.store.retrieveStateVector(room, docid)
   }
 
@@ -219,9 +224,19 @@ export class Api {
    * @param {string} room
    * @param {string} docid
    */
-  async getDoc (room, docid) {
+  async getDoc(room, docid) {
     logApi(`getDoc(${room}, ${docid})`)
-    const ms = extractMessagesFromStreamReply(await this.redis.xRead(redis.commandOptions({ returnBuffers: true }), { key: computeRedisRoomStreamName(room, docid, this.prefix), id: '0' }), this.prefix)
+    const ms = extractMessagesFromStreamReply(
+      // @ts-ignore
+      await this.redis.xreadBuffer(
+        'COUNT', 1000, // Adjust the count as needed
+        'BLOCK', 1000, // Adjust the block time as needed
+        "STREAMS",
+        computeRedisRoomStreamName(room, docid, this.prefix),
+        '0'
+      ),
+      this.prefix
+    )
     logApi(`getDoc(${room}, ${docid}) - retrieved messages`)
     const docMessages = ms.get(room)?.get(docid) || null
     const docstate = await this.store.retrieveDoc(room, docid)
@@ -257,13 +272,24 @@ export class Api {
   /**
    * @param {WorkerOpts} opts
    */
-  async consumeWorkerQueue ({ tryClaimCount = 5, updateCallback = async () => {} }) {
+  async consumeWorkerQueue({ tryClaimCount = 5, updateCallback = async () => { } }) {
     /**
      * @type {Array<{stream: string, id: string}>}
      */
     const tasks = []
-    const reclaimedTasks = await this.redis.xAutoClaim(this.redisWorkerStreamName, this.redisWorkerGroupName, this.consumername, this.redisTaskDebounce, '0', { COUNT: tryClaimCount })
-    reclaimedTasks.messages.forEach(m => {
+    const reclaimedTasks = await this.redis.xautoclaim(
+      this.redisWorkerStreamName,
+      this.redisWorkerGroupName,
+      this.consumername,
+      this.redisTaskDebounce,
+      '0',
+      'COUNT',
+      tryClaimCount
+    )
+    // @ts-ignore
+    const reclaimedTasksRes = transformReply(reclaimedTasks)
+
+    reclaimedTasksRes?.messages.forEach(m => {
       const stream = m?.message.compact
       stream && tasks.push({ stream, id: m?.id })
     })
@@ -274,14 +300,15 @@ export class Api {
     }
     logWorker('Accepted tasks ', { tasks })
     await promise.all(tasks.map(async task => {
-      const streamlen = await this.redis.xLen(task.stream)
+      const streamlen = await this.redis.xlen(task.stream)
       if (streamlen === 0) {
-        await this.redis.multi()
+       await this.redis.multi()
+          // @ts-ignore
           .xDelIfEmpty(task.stream)
-          .xDel(this.redisWorkerStreamName, task.id)
+          .xdel(this.redisWorkerStreamName, task.id)
           .exec()
         logWorker('Stream still empty, removing recurring task from queue ', { stream: task.stream })
-      } else {
+      } else { 
         const { room, docid } = decodeRedisRoomStreamName(task.stream, this.prefix)
         // @todo, make sure that awareness by this.getDoc is eventually destroyed, or doesn't
         // register a timeout anymore
@@ -307,10 +334,14 @@ export class Api {
           // before adding it to the worker queue
           // This issue is not critical, as no data will be lost if this happens.
           this.redis.multi()
-            .xTrim(task.stream, 'MINID', lastId - this.redisMinMessageLifetime)
-            .xAdd(this.redisWorkerStreamName, '*', { compact: task.stream })
-            .xReadGroup(this.redisWorkerGroupName, 'pending', { key: this.redisWorkerStreamName, id: '>' }, { COUNT: 50 }) // immediately claim this entry, will be picked up by worker after timeout
-            .xDel(this.redisWorkerStreamName, task.id)
+            .xtrim(task.stream, 'MINID', lastId - this.redisMinMessageLifetime)
+            .xadd(
+              this.redisWorkerStreamName,
+              '*',
+              "compact",
+              task.stream)
+            .xreadgroup('GROUP', this.redisWorkerGroupName, 'pending', 'COUNT', 50, 'STREAMS', this.redisWorkerStreamName, '>') // immediately claim this entry, will be picked up by worker after timeout
+            .xdel(this.redisWorkerStreamName, task.id)
             .exec()
         ])
         logWorker('Compacted stream ', { stream: task.stream, taskId: task.id, newLastId: lastId - this.redisMinMessageLifetime })

@@ -1,9 +1,9 @@
-import * as Y from 'yjs'
-import * as t from 'lib0/testing'
-import * as api from '../src/api.js'
+import { Redis } from 'ioredis'
 import * as encoding from 'lib0/encoding'
 import * as promise from 'lib0/promise'
-import * as redis from 'redis'
+import * as t from 'lib0/testing'
+import * as Y from 'yjs'
+import * as api from '../src/api.js'
 import { prevClients, store } from './utils.js'
 
 const redisPrefix = 'ytests'
@@ -14,8 +14,7 @@ const redisPrefix = 'ytests'
 const createTestCase = async tc => {
   await promise.all(prevClients.map(c => c.destroy()))
   prevClients.length = 0
-  const redisClient = redis.createClient({ url: api.redisUrl })
-  await redisClient.connect()
+  const redisClient = new Redis(api.redisUrl)
   // flush existing content
   const keysToDelete = await redisClient.keys(redisPrefix + ':*')
   keysToDelete.length > 0 && await redisClient.del(keysToDelete)
@@ -80,6 +79,6 @@ export const testWorker = async tc => {
   t.assert(loadedDoc.getMap().get('key2') === 'val2')
   let workertasksEmpty = false
   while (!workertasksEmpty) {
-    workertasksEmpty = await client.redis.xLen(client.redisWorkerStreamName) === 0
+    workertasksEmpty = await client.redis.xlen(client.redisWorkerStreamName) === 0
   }
 }
