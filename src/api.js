@@ -99,9 +99,10 @@ const decodeRedisRoomStreamName = (rediskey, expectedPrefix) => {
 /**
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
+ * @param {Redis | undefined} redis
  */
-export const createApiClient = async (store, redisPrefix) => {
-  const a = new Api(store, redisPrefix)
+export const createApiClient = async (store, redisPrefix, redis) => {
+  const a = new Api(store, redisPrefix, redis)
   try {
     await a.redis.xgroup(
       'CREATE',
@@ -118,8 +119,9 @@ export class Api {
   /**
    * @param {import('./storage.js').AbstractStorage} store
    * @param {string} prefix
+   * @param {Redis | undefined} redis
    */
-  constructor(store, prefix) {
+  constructor(store, prefix, redis) {
     this.store = store
     this.prefix = prefix
     this.consumername = random.uuidv4()
@@ -135,7 +137,11 @@ export class Api {
     this.redisWorkerGroupName = this.prefix + ':worker'
     this._destroyed = false
 
-    this.redis = new Redis(redisUrl)
+    if (redis) {
+      this.redis = redis
+    } else {
+      this.redis = new Redis(redisUrl)
+    }
 
     this.redis.defineCommand('addMessage', {
       numberOfKeys: 1,
@@ -368,9 +374,10 @@ export class Api {
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
  * @param {WorkerOpts} opts
+ * @param {Redis | undefined} redis
  */
-export const createWorker = async (store, redisPrefix, opts) => {
-  const a = await createApiClient(store, redisPrefix)
+export const createWorker = async (store, redisPrefix, opts, redis = undefined) => {
+  const a = await createApiClient(store, redisPrefix, redis)
   return new Worker(a, opts)
 }
 
