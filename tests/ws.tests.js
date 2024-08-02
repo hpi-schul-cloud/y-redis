@@ -1,15 +1,16 @@
-import * as Y from 'yjs'
-import * as t from 'lib0/testing'
-import * as api from '../src/api.js'
-import * as promise from 'lib0/promise'
-import { WebSocket } from 'ws'
-import { createYWebsocketServer } from '../src/server.js'
+import { Redis } from 'ioredis'
 import * as array from 'lib0/array'
-import { WebsocketProvider } from 'y-websocket'
-import * as redis from 'redis'
-import * as time from 'lib0/time'
 import * as jwt from 'lib0/crypto/jwt'
+import * as promise from 'lib0/promise'
+import * as t from 'lib0/testing'
+import * as time from 'lib0/time'
+import { WebSocket } from 'ws'
+import { WebsocketProvider } from 'y-websocket'
+import * as Y from 'yjs'
+import * as api from '../src/api.js'
+import { createYWebsocketServer } from '../src/server.js'
 import * as utils from './utils.js'
+
 
 const authToken = await jwt.encodeJwt(utils.authPrivateKey, {
   iss: 'my-auth-server',
@@ -54,8 +55,7 @@ const createApiClient = async () => {
 const createTestCase = async tc => {
   await promise.all(utils.prevClients.map(c => c.destroy()))
   utils.prevClients.length = 0
-  const redisClient = redis.createClient({ url: api.redisUrl })
-  await redisClient.connect()
+  const redisClient = new Redis(api.redisUrl)
   // flush existing content
   const keysToDelete = await redisClient.keys(utils.redisPrefix + ':*')
   await redisClient.del(keysToDelete)
@@ -107,7 +107,7 @@ export const testSyncAndCleanup = async tc => {
   t.assert(doc3.getMap().get('a') === 1)
   await promise.wait(worker.client.redisMinMessageLifetime * 5)
   const docStreamExists = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + '-' + 'map', 'index', utils.redisPrefix))
-  const workerLen = await redisClient.xLen(utils.redisPrefix + ':worker')
+  const workerLen = await redisClient.xlen(utils.redisPrefix + ':worker')
   t.assert(!docStreamExists && docStreamExistsBefore)
   t.assert(workerLen === 0)
   t.info('stream cleanup after initial changes')

@@ -1,12 +1,13 @@
-import * as Y from 'yjs'
-import * as uws from 'uws'
-import * as promise from 'lib0/promise'
-import * as api from './api.js'
+import { Redis } from 'ioredis'
 import * as array from 'lib0/array'
-import * as encoding from 'lib0/encoding'
 import * as decoding from 'lib0/decoding'
-import * as protocol from './protocol.js'
+import * as encoding from 'lib0/encoding'
 import * as logging from 'lib0/logging'
+import * as promise from 'lib0/promise'
+import * as uws from 'uws'
+import * as Y from 'yjs'
+import * as api from './api.js'
+import * as protocol from './protocol.js'
 import { createSubscriber } from './subscriber.js'
 
 const log = logging.createModuleLogger('@y/redis/ws')
@@ -84,13 +85,14 @@ class User {
  * @param {Object} conf
  * @param {string} [conf.redisPrefix]
  * @param {(room:string,docname:string,client:api.Api)=>void} [conf.initDocCallback] - this is called when a doc is
+ * @param {Redis | undefined} redis
  * accessed, but it doesn't exist. You could populate the doc here. However, this function could be
  * called several times, until some content exists. So you need to handle concurrent calls.
  */
-export const registerYWebsocketServer = async (app, pattern, store, checkAuth, { redisPrefix = 'y', initDocCallback = () => {} } = {}) => {
+export const registerYWebsocketServer = async (app, pattern, store, checkAuth, { redisPrefix = 'y', initDocCallback = () => {} } = {}, redis = undefined) => {
   const [client, subscriber] = await promise.all([
-    api.createApiClient(store, redisPrefix),
-    createSubscriber(store, redisPrefix)
+    api.createApiClient(store, redisPrefix, redis),
+    createSubscriber(store, redisPrefix, redis)
   ])
   /**
    * @param {string} stream
