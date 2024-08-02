@@ -85,11 +85,20 @@ class User {
  * @param {Object} conf
  * @param {string} [conf.redisPrefix]
  * @param {(room:string,docname:string,client:api.Api)=>void} [conf.initDocCallback] - this is called when a doc is
- * @param {Redis | undefined} redis
  * accessed, but it doesn't exist. You could populate the doc here. However, this function could be
  * called several times, until some content exists. So you need to handle concurrent calls.
+ * @param {(ws:uws.WebSocket<User>)=>void} [conf.openWsCallback] - called when a websocket connection is opened
+ * @param {(ws:uws.WebSocket<User>,code:number,message:ArrayBuffer)=>void} [conf.closeWsCallback] - called when a websocket connection is closed
+ * @param {Redis | undefined} redis
  */
-export const registerYWebsocketServer = async (app, pattern, store, checkAuth, { redisPrefix = 'y', initDocCallback = () => {} } = {}, redis = undefined) => {
+export const registerYWebsocketServer = async (
+  app, 
+  pattern, 
+  store, 
+  checkAuth, 
+  { redisPrefix = 'y', initDocCallback = () => {}, openWsCallback = () => {}, closeWsCallback = () => {} } = {},
+  redis
+) => {
   const [client, subscriber] = await promise.all([
     api.createApiClient(store, redisPrefix, redis),
     createSubscriber(store, redisPrefix, redis)
@@ -147,6 +156,7 @@ export const registerYWebsocketServer = async (app, pattern, store, checkAuth, {
     open: async (ws) => {
       const user = ws.getUserData()
       log(() => ['client connected (uid=', user.id, ', ip=', Buffer.from(ws.getRemoteAddressAsText()).toString(), ')'])
+      openWsCallback(ws);
       const stream = api.computeRedisRoomStreamName(user.room, 'index', redisPrefix)
       user.subs.add(stream)
       ws.subscribe(stream)
@@ -204,6 +214,7 @@ export const registerYWebsocketServer = async (app, pattern, store, checkAuth, {
       user.awarenessId && client.addMessage(user.room, 'index', Buffer.from(protocol.encodeAwarenessUserDisconnected(user.awarenessId, user.awarenessLastClock)))
       user.isClosed = true
       log(() => ['client connection closed (uid=', user.id, ', code=', code, ', message="', Buffer.from(message).toString(), '")'])
+      closeWsCallback(ws, code, message);
       user.subs.forEach(topic => {
         if (app.numSubscribers(topic) === 0) {
           subscriber.unsubscribe(topic, redisMessageSubscriber)
