@@ -72,7 +72,7 @@
   },
   "dependencies": {
     "ioredis": "^5.4.1",
-    "lib0": "^0.2.93",
+    "lib0": "^0.2.95",
     "redis": "^4.7.0",
     "uws": "github:uNetworking/uWebSockets.js#v20.40.0",
     "yjs": "^13.5.6"
