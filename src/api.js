@@ -319,7 +319,8 @@ export class Api {
         // @todo, make sure that awareness by this.getDoc is eventually destroyed, or doesn't
         // register a timeout anymore
         logWorker('requesting doc from store')
-        const { ydoc, storeReferences, redisLastId, docChanged } = await this.getDoc(room, docid)
+        const { ydoc, storeReferences, redisLastId, docChanged, awareness } = await this.getDoc(room, docid)
+        awareness.destroy()
         logWorker('retrieved doc from store. redisLastId=' + redisLastId, ' storeRefs=' + JSON.stringify(storeReferences))
         const lastId = math.max(number.parseInt(redisLastId.split('-')[0]), number.parseInt(task.id.split('-')[0]))
         if (docChanged) {
