@@ -1,12 +1,13 @@
-import * as Y from 'yjs'
-import * as uws from 'uws'
-import * as promise from 'lib0/promise'
-import * as api from './api.js'
+import { Redis } from 'ioredis'
 import * as array from 'lib0/array'
-import * as encoding from 'lib0/encoding'
 import * as decoding from 'lib0/decoding'
-import * as protocol from './protocol.js'
+import * as encoding from 'lib0/encoding'
 import * as logging from 'lib0/logging'
+import * as promise from 'lib0/promise'
+import * as uws from 'uws'
+import * as Y from 'yjs'
+import * as api from './api.js'
+import * as protocol from './protocol.js'
 import { createSubscriber } from './subscriber.js'
 
 const log = logging.createModuleLogger('@y/redis/ws')
@@ -88,17 +89,19 @@ class User {
  * called several times, until some content exists. So you need to handle concurrent calls.
  * @param {(ws:uws.WebSocket<User>)=>void} [conf.openWsCallback] - called when a websocket connection is opened
  * @param {(ws:uws.WebSocket<User>,code:number,message:ArrayBuffer)=>void} [conf.closeWsCallback] - called when a websocket connection is closed
+ * @param {Redis | undefined} redis
  */
 export const registerYWebsocketServer = async (
   app, 
   pattern, 
   store, 
   checkAuth, 
-  { redisPrefix = 'y', initDocCallback = () => {}, openWsCallback = () => {}, closeWsCallback = () => {} } = {}
+  { redisPrefix = 'y', initDocCallback = () => {}, openWsCallback = () => {}, closeWsCallback = () => {} } = {},
+  redis
 ) => {
   const [client, subscriber] = await promise.all([
-    api.createApiClient(store, redisPrefix),
-    createSubscriber(store, redisPrefix)
+    api.createApiClient(store, redisPrefix, redis),
+    createSubscriber(store, redisPrefix, redis)
   ])
   /**
    * @param {string} stream
@@ -170,6 +173,9 @@ export const registerYWebsocketServer = async (
           ws.send(protocol.encodeAwarenessUpdate(indexDoc.awareness, array.from(indexDoc.awareness.states.keys())), true, true)
         }
       })
+      // https://github.com/yjs/y-redis/issues/24
+      indexDoc.awareness.destroy()
+
       if (api.isSmallerRedisId(indexDoc.redisLastId, user.initialRedisSubId)) {
         // our subscription is newer than the content that we received from the api
         // need to renew subscription id and make sure that we catch the latest content.
@@ -185,7 +191,7 @@ export const registerYWebsocketServer = async (
       if ( // filter out messages that we simply want to propagate to all clients
         // sync update or sync step 2
         (message[0] === protocol.messageSync && (message[1] === protocol.messageSyncUpdate || message[1] === protocol.messageSyncStep2)) ||
-        // awareness update
+        // awaeness update
         message[0] === protocol.messageAwareness
       ) {
         if (message[0] === protocol.messageAwareness) {
