@@ -173,6 +173,9 @@ export const registerYWebsocketServer = async (
           ws.send(protocol.encodeAwarenessUpdate(indexDoc.awareness, array.from(indexDoc.awareness.states.keys())), true, true)
         }
       })
+      // https://github.com/yjs/y-redis/issues/24
+      indexDoc.awareness.destroy()
+
       if (api.isSmallerRedisId(indexDoc.redisLastId, user.initialRedisSubId)) {
         // our subscription is newer than the content that we received from the api
         // need to renew subscription id and make sure that we catch the latest content.
@@ -188,7 +191,7 @@ export const registerYWebsocketServer = async (
       if ( // filter out messages that we simply want to propagate to all clients
         // sync update or sync step 2
         (message[0] === protocol.messageSync && (message[1] === protocol.messageSyncUpdate || message[1] === protocol.messageSyncStep2)) ||
-        // awareness update
+        // awaeness update
         message[0] === protocol.messageAwareness
       ) {
         if (message[0] === protocol.messageAwareness) {
