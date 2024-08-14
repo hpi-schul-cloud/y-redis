@@ -191,7 +191,7 @@ export const registerYWebsocketServer = async (
       if ( // filter out messages that we simply want to propagate to all clients
         // sync update or sync step 2
         (message[0] === protocol.messageSync && (message[1] === protocol.messageSyncUpdate || message[1] === protocol.messageSyncStep2)) ||
-        // awaeness update
+        // awareness update
         message[0] === protocol.messageAwareness
       ) {
         if (message[0] === protocol.messageAwareness) {
