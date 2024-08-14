@@ -278,7 +278,7 @@ export class Api {
   /**
    * @param {WorkerOpts} opts
    */
-  async consumeWorkerQueue({ tryClaimCount = 5, updateCallback = async () => { } }) {
+  async consumeWorkerQueue({ tryClaimCount = 5, updateCallback = async () => {} }) {
     /**
      * @type {Array<{stream: string, id: string}>}
      */
@@ -314,7 +314,7 @@ export class Api {
           .xdel(this.redisWorkerStreamName, task.id)
           .exec()
         logWorker('Stream still empty, removing recurring task from queue ', { stream: task.stream })
-      } else { 
+      } else {
         const { room, docid } = decodeRedisRoomStreamName(task.stream, this.prefix)
         // @todo, make sure that awareness by this.getDoc is eventually destroyed, or doesn't
         // register a timeout anymore
