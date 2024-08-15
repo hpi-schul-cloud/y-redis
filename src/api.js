@@ -17,8 +17,6 @@ import * as protocol from './protocol.js'
 const logWorker = logging.createModuleLogger('@y/redis/api/worker')
 const logApi = logging.createModuleLogger('@y/redis/api')
 
-export const redisUrl = env.ensureConf('redis')
-
 /**
  * @param {string} a
  * @param {string} b
@@ -140,6 +138,8 @@ export class Api {
     if (redis) {
       this.redis = redis
     } else {
+      const redisUrl = env.ensureConf('redis')
+
       this.redis = new Redis(redisUrl)
     }
 

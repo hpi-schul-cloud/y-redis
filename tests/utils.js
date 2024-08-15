@@ -1,6 +1,6 @@
+import * as ecdsa from 'lib0/crypto/ecdsa'
 import * as env from 'lib0/environment'
 import * as json from 'lib0/json'
-import * as ecdsa from 'lib0/crypto/ecdsa'
 
 import { createMemoryStorage } from '../src/storage/memory.js'
 
@@ -22,3 +22,4 @@ export const authTokenUrl = `${authDemoServerUrl}/auth/token`
 
 export const yredisPort = 9999
 export const yredisUrl = `ws://localhost:${yredisPort}/`
+export const redisUrl = env.ensureConf('redis')

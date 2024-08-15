@@ -4,7 +4,7 @@ import * as promise from 'lib0/promise'
 import * as t from 'lib0/testing'
 import * as Y from 'yjs'
 import * as api from '../src/api.js'
-import { prevClients, store } from './utils.js'
+import { prevClients, redisUrl, store } from './utils.js'
 
 const redisPrefix = 'ytests'
 
@@ -14,7 +14,7 @@ const redisPrefix = 'ytests'
 const createTestCase = async tc => {
   await promise.all(prevClients.map(c => c.destroy()))
   prevClients.length = 0
-  const redisClient = new Redis(api.redisUrl)
+  const redisClient = new Redis(redisUrl)
   // flush existing content
   const keysToDelete = await redisClient.keys(redisPrefix + ':*')
   keysToDelete.length > 0 && await redisClient.del(keysToDelete)
