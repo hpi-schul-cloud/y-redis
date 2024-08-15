@@ -173,7 +173,8 @@ export const registerYWebsocketServer = async (
           ws.send(protocol.encodeAwarenessUpdate(indexDoc.awareness, array.from(indexDoc.awareness.states.keys())), true, true)
         }
       })
-      // https://github.com/yjs/y-redis/issues/24
+
+      // awareness is destroyed here to avoid memory leaks, see: https://github.com/yjs/y-redis/issues/24
       indexDoc.awareness.destroy()
 
       if (api.isSmallerRedisId(indexDoc.redisLastId, user.initialRedisSubId)) {
