@@ -7,10 +7,13 @@ import * as time from 'lib0/time'
 import { WebSocket } from 'ws'
 import { WebsocketProvider } from 'y-websocket'
 import * as Y from 'yjs'
-import * as api from '../src/api.js'
-import { createYWebsocketServer } from '../src/server.js'
-import * as utils from './utils.js'
+import * as api from '../../src/api.js'
+import { createYWebsocketServer } from '../../src/server.js'
+import * as utils from '../utils.js'
 
+const redisPrefix = 'ytestsioredis'
+export const yredisPort = 9999
+export const yredisUrl = `ws://localhost:${yredisPort}/`
 
 const authToken = await jwt.encodeJwt(utils.authPrivateKey, {
   iss: 'my-auth-server',
@@ -25,12 +28,12 @@ const authToken = await jwt.encodeJwt(utils.authPrivateKey, {
 const createWsClient = (tc, room) => {
   const ydoc = new Y.Doc()
   const roomPrefix = tc.testName
-  const provider = new WebsocketProvider(utils.yredisUrl, roomPrefix + '-' + room, ydoc, { WebSocketPolyfill: /** @type {any} */ (WebSocket), disableBc: true, params: {}, protocols: [`yauth-${authToken}`] })
+  const provider = new WebsocketProvider(yredisUrl, roomPrefix + '-' + room, ydoc, { WebSocketPolyfill: /** @type {any} */ (WebSocket), disableBc: true, params: {}, protocols: [`yauth-${authToken}`] })
   return { ydoc, provider }
 }
 
-const createWorker = async () => {
-  const worker = await api.createWorker(utils.store, utils.redisPrefix, {})
+const createWorker = async (redis) => {
+  const worker = await api.createWorker(utils.store, redisPrefix, {}, redis)
   worker.client.redisMinMessageLifetime = 800
   worker.client.redisTaskDebounce = 500
   utils.prevClients.push(worker.client)
@@ -38,13 +41,19 @@ const createWorker = async () => {
 }
 
 const createServer = async () => {
-  const server = await createYWebsocketServer({ port: utils.yredisPort, store: utils.store, redisPrefix: utils.redisPrefix, checkPermCallbackUrl: utils.checkPermCallbackUrl })
+  const redis = new Redis(api.redisUrl)
+
+  const server = await createYWebsocketServer({ port: yredisPort, store: utils.store, redisPrefix: redisPrefix, checkPermCallbackUrl: utils.checkPermCallbackUrl, redis })
   utils.prevClients.push(server)
   return server
 }
-
-const createApiClient = async () => {
-  const client = await api.createApiClient(utils.store, utils.redisPrefix)
+/**
+ * 
+ * @param {Redis} redis 
+ * @returns 
+ */
+const createApiClient = async (redis) => {
+  const client = await api.createApiClient(utils.store, redisPrefix, redis)
   utils.prevClients.push(client)
   return client
 }
@@ -57,11 +66,14 @@ const createTestCase = async tc => {
   utils.prevClients.length = 0
   const redisClient = new Redis(api.redisUrl)
   // flush existing content
-  const keysToDelete = await redisClient.keys(utils.redisPrefix + ':*')
+  const keysToDelete = await redisClient.keys(redisPrefix + ':*')
   await redisClient.del(keysToDelete)
   utils.prevClients.push({ destroy: () => redisClient.quit().then(() => {}) })
   const server = await createServer()
-  const [apiClient, worker] = await promise.all([createApiClient(), createWorker()])
+  const redis1 = new Redis(api.redisUrl)
+  const redis2 = new Redis(api.redisUrl)
+
+  const [apiClient, worker] = await promise.all([createApiClient(redis1), createWorker(redis2)])
   return {
     redisClient,
     apiClient,
@@ -98,7 +110,7 @@ export const testSyncAndCleanup = async tc => {
   t.info('docs syncing (0)')
   await waitDocsSynced(doc1, doc2)
   t.info('docs synced (1)')
-  const docStreamExistsBefore = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + '-' + 'map', 'index', utils.redisPrefix))
+  const docStreamExistsBefore = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + '-' + 'map', 'index', redisPrefix))
   t.assert(doc2.getMap().get('a') === 1)
   // doc3 can retrieve older changes from stream
   const { ydoc: doc3 } = createWsClient('map')
@@ -106,8 +118,8 @@ export const testSyncAndCleanup = async tc => {
   t.info('docs synced (2)')
   t.assert(doc3.getMap().get('a') === 1)
   await promise.wait(worker.client.redisMinMessageLifetime * 5)
-  const docStreamExists = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + '-' + 'map', 'index', utils.redisPrefix))
-  const workerLen = await redisClient.xlen(utils.redisPrefix + ':worker')
+  const docStreamExists = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + '-' + 'map', 'index', redisPrefix))
+  const workerLen = await redisClient.xlen(redisPrefix + ':worker')
   t.assert(!docStreamExists && docStreamExistsBefore)
   t.assert(workerLen === 0)
   t.info('stream cleanup after initial changes')

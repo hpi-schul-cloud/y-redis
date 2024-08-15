@@ -1,12 +1,12 @@
-import * as uws from 'uws'
-import * as env from 'lib0/environment'
-import * as logging from 'lib0/logging'
-import * as error from 'lib0/error'
-import * as jwt from 'lib0/crypto/jwt'
 import * as ecdsa from 'lib0/crypto/ecdsa'
+import * as jwt from 'lib0/crypto/jwt'
+import * as env from 'lib0/environment'
+import * as error from 'lib0/error'
 import * as json from 'lib0/json'
-import { registerYWebsocketServer } from '../src/ws.js'
+import * as logging from 'lib0/logging'
 import * as promise from 'lib0/promise'
+import * as uws from 'uws'
+import { registerYWebsocketServer } from '../src/ws.js'
 
 class YWebsocketServer {
   /**
@@ -27,8 +27,9 @@ class YWebsocketServer {
  * @param {import('./storage.js').AbstractStorage} opts.store
  * @param {string} [opts.redisPrefix]
  * @param {string} opts.checkPermCallbackUrl
- * @param {(room:string,docname:string,client:import('./api.js').Api)=>void} [opts.initDocCallback] -
- * this is called when a doc is accessed, but it doesn't exist. You could populate the doc here.
+ * @param {(room:string,docname:string,client:import('./api.js').Api)=>void} [opts.initDocCallback]
+ * @param { import('ioredis').Redis } [opts.redis]
+* this is called when a doc is accessed, but it doesn't exist. You could populate the doc here.
  * However, this function could be called several times, until some content exists. So you need to
  * handle concurrent calls.
  */
@@ -37,7 +38,8 @@ export const createYWebsocketServer = async ({
   port,
   store,
   checkPermCallbackUrl,
-  initDocCallback = () => {}
+  initDocCallback = () => {},
+  redis
 }) => {
   checkPermCallbackUrl += checkPermCallbackUrl.slice(-1) !== '/' ? '/' : ''
   const app = uws.App({})
@@ -62,7 +64,7 @@ export const createYWebsocketServer = async ({
       console.error('Failed to pull permissions from', { permUrl })
       throw e
     }
-  }, { redisPrefix, initDocCallback })
+  }, { redisPrefix, initDocCallback }, redis)
 
   await promise.create((resolve, reject) => {
     app.listen(port, (token) => {

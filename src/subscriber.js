@@ -34,9 +34,9 @@ const run = async subscriber => {
 /**
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
- * @param {Redis | undefined} redis
+ * @param {Redis} redis
  */
-export const createSubscriber = async (store, redisPrefix, redis = undefined) => {
+export const createSubscriber = async (store, redisPrefix, redis) => {
   const client = await api.createApiClient(store, redisPrefix, redis)
   return new Subscriber(client)
 }

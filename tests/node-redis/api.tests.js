@@ -1,12 +1,12 @@
-import { Redis } from 'ioredis'
 import * as encoding from 'lib0/encoding'
 import * as promise from 'lib0/promise'
 import * as t from 'lib0/testing'
+import { createClient } from 'redis'
 import * as Y from 'yjs'
-import * as api from '../src/api.js'
-import { prevClients, store } from './utils.js'
+import * as api from '../../src/api.js'
+import { prevClients, store } from '../utils.js'
 
-const redisPrefix = 'ytests'
+const redisPrefix = 'ytestsnoderedis'
 
 /**
  * @param {t.TestCase} tc
@@ -14,12 +14,15 @@ const redisPrefix = 'ytests'
 const createTestCase = async tc => {
   await promise.all(prevClients.map(c => c.destroy()))
   prevClients.length = 0
-  const redisClient = new Redis(api.redisUrl)
+  const redisClient = createClient({ url: api.redisUrl })
+  await redisClient.connect()
+
   // flush existing content
   const keysToDelete = await redisClient.keys(redisPrefix + ':*')
   keysToDelete.length > 0 && await redisClient.del(keysToDelete)
   await redisClient.quit()
-  const client = await api.createApiClient(store, redisPrefix)
+  const redis = createClient({ url: api.redisUrl })
+  const client = await api.createApiClient(store, redisPrefix, redis)
   prevClients.push(client)
   const room = tc.testName
   const docid = 'main'
@@ -38,12 +41,13 @@ const createTestCase = async tc => {
     ydoc,
     room,
     docid,
-    stream
+    stream,
   }
 }
 
 const createWorker = async () => {
-  const worker = await api.createWorker(store, redisPrefix, {})
+  const redis = createClient({ url: api.redisUrl })
+  const worker = await api.createWorker(store, redisPrefix, {}, redis)
   worker.client.redisMinMessageLifetime = 10000
   worker.client.redisTaskDebounce = 5000
   prevClients.push(worker.client)
@@ -79,6 +83,6 @@ export const testWorker = async tc => {
   t.assert(loadedDoc.getMap().get('key2') === 'val2')
   let workertasksEmpty = false
   while (!workertasksEmpty) {
-    workertasksEmpty = await client.redis.xlen(client.redisWorkerStreamName) === 0
+    workertasksEmpty = await client.redis.getEntriesLen(client.redisWorkerStreamName) === 0
   }
 }

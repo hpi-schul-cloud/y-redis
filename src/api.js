@@ -1,6 +1,4 @@
-import { transformStreamMessagesReply } from '@redis/client/dist/lib/commands/generic-transformers.js'
-import { transformReply } from '@redis/client/dist/lib/commands/XAUTOCLAIM.js'
-import { Redis } from 'ioredis'
+import { Redis as IoRedis } from 'ioredis'
 import * as array from 'lib0/array'
 import * as decoding from 'lib0/decoding'
 import * as env from 'lib0/environment'
@@ -13,6 +11,8 @@ import * as random from 'lib0/random'
 import * as awarenessProtocol from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import * as protocol from './protocol.js'
+import { IoRedisAdapter } from './redis/io-redis.js'
+import { NodeRedisAdapter } from './redis/node-redis.js'
 
 const logWorker = logging.createModuleLogger('@y/redis/api/worker')
 const logApi = logging.createModuleLogger('@y/redis/api')
@@ -32,32 +32,16 @@ export const isSmallerRedisId = (a, b) => {
   return a1n < b1n || (a1n === b1n && number.parseInt(a2) < number.parseInt(b2))
 }
 
-const normalizeStreamMessagesReply = (/** @type {any[]} */ streamReply) => {
-  const streamReplyRes = streamReply?.map((item) => {
-    // @ts-ignore
-    const [name, messages] = item
-    return {
-      name,
-      messages: transformStreamMessagesReply(messages)
-    }
-  })
-
-  return streamReplyRes
-}
-
 /**
  * @param {import('@redis/client/dist/lib/commands/generic-transformers.js').StreamsMessagesReply} streamReply
  * @param {string} prefix
  */
 const extractMessagesFromStreamReply = (streamReply, prefix) => {
-
-  // @ts-ignore
-  const streamReplyRes = normalizeStreamMessagesReply(streamReply)
   /**
    * @type {Map<string, Map<string, { lastId: string, messages: Array<Uint8Array> }>>}
   */
- const messages = new Map()
- streamReplyRes?.forEach(docStreamReply => {
+  const messages = new Map()
+  streamReply?.forEach(docStreamReply => {
     const { room, docid } = decodeRedisRoomStreamName(docStreamReply.name.toString(), prefix)
     const docMessages = map.setIfUndefined(
       map.setIfUndefined(
@@ -70,7 +54,7 @@ const extractMessagesFromStreamReply = (streamReply, prefix) => {
     )
     docStreamReply.messages.forEach(m => {
       if (m.message.m != null) {
-        docMessages.messages.push(/** @type {Uint8Array} */ (m.message.m))
+        docMessages.messages.push(/** @type {Uint8Array} */(m.message.m))
       }
     })
   })
@@ -99,18 +83,12 @@ const decodeRedisRoomStreamName = (rediskey, expectedPrefix) => {
 /**
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
- * @param {Redis | undefined} redis
+ * @param {import('redis').RedisClientType | IoRedis} redis
  */
 export const createApiClient = async (store, redisPrefix, redis) => {
   const a = new Api(store, redisPrefix, redis)
   try {
-    await a.redis.xgroup(
-      'CREATE',
-      a.redisWorkerStreamName,
-      a.redisWorkerGroupName,
-      '0',
-      'MKSTREAM'
-    )
+    await a.redis.createGroup()
   } catch (e) { }
   return a
 }
@@ -119,7 +97,7 @@ export class Api {
   /**
    * @param {import('./storage.js').AbstractStorage} store
    * @param {string} prefix
-   * @param {Redis | undefined} redis
+   * @param {import('redis').RedisClientType | IoRedis} redis
    */
   constructor(store, prefix, redis) {
     this.store = store
@@ -137,31 +115,17 @@ export class Api {
     this.redisWorkerGroupName = this.prefix + ':worker'
     this._destroyed = false
 
-    if (redis) {
-      this.redis = redis
+    if (redis instanceof IoRedis) {
+      /**
+       * @type {IoRedisAdapter}
+       */
+      this.redis = new IoRedisAdapter(redis, this.redisWorkerStreamName, this.redisWorkerGroupName)
+    } else if (redis instanceof Object) {
+      // @ts-ignore
+      this.redis = new NodeRedisAdapter(redis, this.redisWorkerStreamName, this.redisWorkerGroupName)
     } else {
-      this.redis = new Redis(redisUrl)
+      throw new Error('Invalid redis instance');
     }
-
-    this.redis.defineCommand('addMessage', {
-      numberOfKeys: 1,
-      lua: `
-        if redis.call("EXISTS", KEYS[1]) == 0 then
-          redis.call("XADD", "${this.redisWorkerStreamName}", "*", "compact", KEYS[1])
-          redis.call("XREADGROUP", "GROUP", "${this.redisWorkerGroupName}", "pending", "STREAMS", "${this.redisWorkerStreamName}", ">")
-        end
-        redis.call("XADD", KEYS[1], "*", "m", ARGV[1])
-      `,
-    });
-
-    this.redis.defineCommand('xDelIfEmpty', {
-      numberOfKeys: 1,
-      lua: `
-        if redis.call("XLEN", KEYS[1]) == 0 then
-          redis.call("DEL", KEYS[1])
-        end
-      `,
-    });
   }
 
 
@@ -175,28 +139,20 @@ export class Api {
       return []
     }
 
-     const reads = await this.redis.xreadBuffer(
-       "COUNT", 1000,
-       "BLOCK", 1000,
-       "STREAMS",
-       ...streams.map(stream => stream.key),
-       ...streams.map(stream => stream.id),
-      )
+    const streamReplyRes = await this.redis.readStreams(streams)
 
-      // @ts-ignore
-      const streamReplyRes = normalizeStreamMessagesReply(reads)
     /**
      * @type {Array<{ stream: string, messages: Array<Uint8Array>, lastId: string }>}
      */
     const res = []
-    streamReplyRes?.forEach(stream => {
-       res.push({
-         stream: stream.name.toString(),
-         // @ts-ignore
-         messages: protocol.mergeMessages(stream.messages.map(message => message.message.m).filter(m => m != null)),
-         lastId: array.last(stream.messages).id.toString()
-       })
-     })
+    streamReplyRes?.forEach((stream) => {
+      res.push({
+        stream: stream.name.toString(),
+        // @ts-ignore
+        messages: protocol.mergeMessages(stream.messages.map(message => message.message.m).filter(m => m != null)),
+        lastId: array.last(stream.messages).id.toString()
+      })
+    })
     return res
   }
 
@@ -234,13 +190,7 @@ export class Api {
     logApi(`getDoc(${room}, ${docid})`)
     const ms = extractMessagesFromStreamReply(
       // @ts-ignore
-      await this.redis.xreadBuffer(
-        'COUNT', 1000, // Adjust the count as needed
-        'BLOCK', 1000, // Adjust the block time as needed
-        "STREAMS",
-        computeRedisRoomStreamName(room, docid, this.prefix),
-        '0'
-      ),
+      await this.redis.readMessagesFromStream(computeRedisRoomStreamName(room, docid, this.prefix)),
       this.prefix
     )
     logApi(`getDoc(${room}, ${docid}) - retrieved messages`)
@@ -283,19 +233,11 @@ export class Api {
      * @type {Array<{stream: string, id: string}>}
      */
     const tasks = []
-    const reclaimedTasks = await this.redis.xautoclaim(
-      this.redisWorkerStreamName,
-      this.redisWorkerGroupName,
-      this.consumername,
-      this.redisTaskDebounce,
-      '0',
-      'COUNT',
-      tryClaimCount
-    )
-    // @ts-ignore
-    const reclaimedTasksRes = transformReply(reclaimedTasks)
 
-    reclaimedTasksRes?.messages.forEach(m => {
+    const reclaimedTasks = await this.redis.reclaimTasks(this.consumername, this.redisTaskDebounce, tryClaimCount)
+
+    // @ts-ignore
+    reclaimedTasks?.messages.forEach(m => {
       const stream = m?.message.compact
       stream && tasks.push({ stream, id: m?.id })
     })
@@ -306,15 +248,10 @@ export class Api {
     }
     logWorker('Accepted tasks ', { tasks })
     await promise.all(tasks.map(async task => {
-      const streamlen = await this.redis.xlen(task.stream)
+      const streamlen = await this.redis.tryClearTask(task)
       if (streamlen === 0) {
-       await this.redis.multi()
-          // @ts-ignore
-          .xDelIfEmpty(task.stream)
-          .xdel(this.redisWorkerStreamName, task.id)
-          .exec()
         logWorker('Stream still empty, removing recurring task from queue ', { stream: task.stream })
-      } else { 
+      } else {
         const { room, docid } = decodeRedisRoomStreamName(task.stream, this.prefix)
         // @todo, make sure that awareness by this.getDoc is eventually destroyed, or doesn't
         // register a timeout anymore
@@ -335,21 +272,7 @@ export class Api {
         }
         await promise.all([
           storeReferences && docChanged ? this.store.deleteReferences(room, docid, storeReferences) : promise.resolve(),
-          // if `redisTaskDebounce` is small, or if updateCallback taskes too long, then we might
-          // add a task twice to this list.
-          // @todo either use a different datastructure or make sure that task doesn't exist yet
-          // before adding it to the worker queue
-          // This issue is not critical, as no data will be lost if this happens.
-          this.redis.multi()
-            .xtrim(task.stream, 'MINID', lastId - this.redisMinMessageLifetime)
-            .xadd(
-              this.redisWorkerStreamName,
-              '*',
-              "compact",
-              task.stream)
-            .xreadgroup('GROUP', this.redisWorkerGroupName, 'pending', 'COUNT', 50, 'STREAMS', this.redisWorkerStreamName, '>') // immediately claim this entry, will be picked up by worker after timeout
-            .xdel(this.redisWorkerStreamName, task.id)
-            .exec()
+          this.redis.tryDeduplicateTask(task, lastId, this.redisMinMessageLifetime)
         ])
         logWorker('Compacted stream ', { stream: task.stream, taskId: task.id, newLastId: lastId - this.redisMinMessageLifetime })
       }
@@ -357,11 +280,11 @@ export class Api {
     return tasks
   }
 
-  async destroy () {
+  async destroy() {
     this._destroyed = true
     try {
       await this.redis.quit()
-    } catch (e) {}
+    } catch (e) { }
   }
 }
 
@@ -375,9 +298,9 @@ export class Api {
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
  * @param {WorkerOpts} opts
- * @param {Redis | undefined} redis
+ * @param {import('redis').RedisClientType | IoRedis} redis
  */
-export const createWorker = async (store, redisPrefix, opts, redis = undefined) => {
+export const createWorker = async (store, redisPrefix, opts, redis) => {
   const a = await createApiClient(store, redisPrefix, redis)
   return new Worker(a, opts)
 }
@@ -387,18 +310,18 @@ export class Worker {
    * @param {Api} client
    * @param {WorkerOpts} opts
    */
-  constructor (client, opts) {
+  constructor(client, opts) {
     this.client = client
     logWorker('Created worker process ', { id: client.consumername, prefix: client.prefix, minMessageLifetime: client.redisMinMessageLifetime })
-    ;(async () => {
-      while (!client._destroyed) {
-        try {
-          await client.consumeWorkerQueue(opts)
-        } catch (e) {
-          console.error(e)
+      ; (async () => {
+        while (!client._destroyed) {
+          try {
+            await client.consumeWorkerQueue(opts)
+          } catch (e) {
+            console.error(e)
+          }
         }
-      }
-      logWorker('Ended worker process ', { id: client.consumername })
-    })()
+        logWorker('Ended worker process ', { id: client.consumername })
+      })()
   }
 }
