@@ -32,7 +32,6 @@ export const isSmallerRedisId = (a, b) => {
 
 const normalizeStreamMessagesReply = (/** @type {any[]} */ streamReply) => {
   const streamReplyRes = streamReply?.map((item) => {
-    // @ts-ignore
     const [name, messages] = item
     return {
       name,
@@ -48,7 +47,6 @@ const normalizeStreamMessagesReply = (/** @type {any[]} */ streamReply) => {
  * @param {string} prefix
  */
 const extractMessagesFromStreamReply = (streamReply, prefix) => {
-
   // @ts-ignore
   const streamReplyRes = normalizeStreamMessagesReply(streamReply)
   /**
@@ -297,6 +295,7 @@ export class Api {
 
     reclaimedTasksRes?.messages.forEach(m => {
       const stream = m?.message.compact
+      // @ts-ignore
       stream && tasks.push({ stream, id: m?.id })
     })
     if (tasks.length === 0) {
