@@ -329,8 +329,10 @@ export class Api {
   async destroy () {
     this._destroyed = true
     try {
-      await this.redis.quit()
-    } catch (e) {}
+      await this.redis.quit() 
+    } catch (e) {
+      console.error(e)
+    }
   }
 }
 
