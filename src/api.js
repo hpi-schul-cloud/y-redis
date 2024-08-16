@@ -99,10 +99,10 @@ const decodeRedisRoomStreamName = (rediskey, expectedPrefix) => {
 /**
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
- * @param {Redis | undefined} redis
+ * @param {Redis | undefined} ioRedisInstance
  */
-export const createApiClient = async (store, redisPrefix, redis) => {
-  const a = new Api(store, redisPrefix, redis)
+export const createApiClient = async (store, redisPrefix, ioRedisInstance) => {
+  const a = new Api(store, redisPrefix, ioRedisInstance)
   try {
     await a.redis.xgroup(
       'CREATE',
@@ -119,9 +119,9 @@ export class Api {
   /**
    * @param {import('./storage.js').AbstractStorage} store
    * @param {string} prefix
-   * @param {Redis | undefined} redis
+   * @param {Redis | undefined} ioRedisInstance
    */
-  constructor(store, prefix, redis) {
+  constructor(store, prefix, ioRedisInstance) {
     this.store = store
     this.prefix = prefix
     this.consumername = random.uuidv4()
@@ -137,8 +137,8 @@ export class Api {
     this.redisWorkerGroupName = this.prefix + ':worker'
     this._destroyed = false
 
-    if (redis) {
-      this.redis = redis
+    if (ioRedisInstance) {
+      this.redis = ioRedisInstance
     } else {
       this.redis = new Redis(redisUrl)
     }
