@@ -88,7 +88,7 @@ export const createApiClient = async (store, redisPrefix) => {
   try {
     await a.redis.xGroupCreate(a.redisWorkerStreamName, a.redisWorkerGroupName, '0', { MKSTREAM: true })
   } catch (e) { 
-    // It is okay when the group already exists, so we can ignore the error.
+    // It is okay when the group already exists, so we can ignore this error.
     if(!(e instanceof redis.ErrorReply) || e.message !== 'BUSYGROUP Consumer Group name already exists') {
       throw e
     }
