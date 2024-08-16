@@ -17,8 +17,6 @@ import * as protocol from './protocol.js'
 const logWorker = logging.createModuleLogger('@y/redis/api/worker')
 const logApi = logging.createModuleLogger('@y/redis/api')
 
-export const redisUrl = env.ensureConf('redis')
-
 /**
  * @param {string} a
  * @param {string} b
@@ -140,6 +138,8 @@ export class Api {
     if (ioRedisInstance) {
       this.redis = ioRedisInstance
     } else {
+      const redisUrl = env.ensureConf('redis')
+
       this.redis = new Redis(redisUrl)
     }
 
@@ -320,6 +320,8 @@ export class Api {
         // register a timeout anymore
         logWorker('requesting doc from store')
         const { ydoc, storeReferences, redisLastId, docChanged, awareness } = await this.getDoc(room, docid)
+
+        // awareness is destroyed here to avoid memory leaks, see: https://github.com/yjs/y-redis/issues/24
         awareness.destroy()
         logWorker('retrieved doc from store. redisLastId=' + redisLastId, ' storeRefs=' + JSON.stringify(storeReferences))
         const lastId = math.max(number.parseInt(redisLastId.split('-')[0]), number.parseInt(task.id.split('-')[0]))

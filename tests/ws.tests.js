@@ -55,7 +55,7 @@ const createApiClient = async () => {
 const createTestCase = async tc => {
   await promise.all(utils.prevClients.map(c => c.destroy()))
   utils.prevClients.length = 0
-  const redisClient = new Redis(api.redisUrl)
+  const redisClient = new Redis(utils.redisUrl)
   // flush existing content
   const keysToDelete = await redisClient.keys(utils.redisPrefix + ':*')
   await redisClient.del(keysToDelete)
