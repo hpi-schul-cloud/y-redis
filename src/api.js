@@ -100,6 +100,7 @@ const decodeRedisRoomStreamName = (rediskey, expectedPrefix) => {
 export const createApiClient = async (store, redisPrefix, ioRedisInstance) => {
   const a = new Api(store, redisPrefix, ioRedisInstance)
   try {
+
     await a.redis.xgroup(
       'CREATE',
       a.redisWorkerStreamName,
@@ -107,7 +108,13 @@ export const createApiClient = async (store, redisPrefix, ioRedisInstance) => {
       '0',
       'MKSTREAM'
     )
-  } catch (e) { }
+  } catch (e) { 
+    // It is okay when the group already exists, so we can ignore this error.
+    if(!(e instanceof redis.ErrorReply) || e.message !== 'BUSYGROUP Consumer Group name already exists') {
+      throw e
+    }
+  }
+
   return a
 }
 
@@ -361,8 +368,10 @@ export class Api {
   async destroy () {
     this._destroyed = true
     try {
-      await this.redis.quit()
-    } catch (e) {}
+      await this.redis.quit() 
+    } catch (e) {
+      console.error(e)
+    }
   }
 }
 
