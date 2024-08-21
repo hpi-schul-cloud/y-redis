@@ -89,7 +89,7 @@ export const createApiClient = async (store, redisPrefix, redisInstance) => {
     await a.redis.createGroup()
   } catch (e) {
     // It is okay when the group already exists, so we can ignore this error.
-    if(!(e instanceof redis.ErrorReply) || e.message !== 'BUSYGROUP Consumer Group name already exists') {
+    if(e.message !== 'BUSYGROUP Consumer Group name already exists') {
       throw e
     }
   }
@@ -121,12 +121,11 @@ export class Api {
 
     if (redisInstance instanceof IoRedis) {
       /**
-       * @type {IoRedisAdapter}
+       * @type {IoRedisAdapter | NodeRedisAdapter}
        */
       this.redis = new IoRedisAdapter(redisInstance, this.redisWorkerStreamName, this.redisWorkerGroupName)
     } else if (redisInstance instanceof Object) {
-      // @ts-ignore
-      this.redis = new NodeRedisAdapter(redis, this.redisWorkerStreamName, this.redisWorkerGroupName)
+      this.redis = new NodeRedisAdapter(redisInstance, this.redisWorkerStreamName, this.redisWorkerGroupName)
     } else {
       throw new Error('Invalid redis instance');
     }
@@ -145,14 +144,14 @@ export class Api {
 
     const streamReplyRes = await this.redis.readStreams(streams)
 
+
     /**
-     * @type {Array<{ stream: string, messages: Array<Uint8Array>, lastId: string }>}
+     * @type {{ stream: string; messages: Array<Uint8Array>; lastId: string; }[] | PromiseLike<{ stream: string; messages: Array<Uint8Array>; lastId: string; }[]>}
      */
     const res = []
     streamReplyRes?.forEach((stream) => {
       res.push({
         stream: stream.name.toString(),
-        // @ts-ignore
         messages: protocol.mergeMessages(stream.messages.map(message => message.message.m).filter(m => m != null)),
         lastId: array.last(stream.messages).id.toString()
       })
@@ -174,7 +173,7 @@ export class Api {
       }
       m[1] = protocol.messageSyncUpdate
     }
-    // @ts-ignore
+
     return this.redis.addMessage(computeRedisRoomStreamName(room, docid, this.prefix), m)
   }
 
@@ -193,7 +192,6 @@ export class Api {
   async getDoc(room, docid) {
     logApi(`getDoc(${room}, ${docid})`)
     const ms = extractMessagesFromStreamReply(
-      // @ts-ignore
       await this.redis.readMessagesFromStream(computeRedisRoomStreamName(room, docid, this.prefix)),
       this.prefix
     )
@@ -240,11 +238,9 @@ export class Api {
 
     const reclaimedTasks = await this.redis.reclaimTasks(this.consumername, this.redisTaskDebounce, tryClaimCount)
 
-    // @ts-ignore
     reclaimedTasks?.messages.forEach(m => {
       const stream = m?.message.compact
-      // @ts-ignore
-      stream && tasks.push({ stream, id: m?.id })
+      stream && tasks.push({ stream: stream.toString(), id: m?.id.toString() })
     })
     if (tasks.length === 0) {
       logWorker('No tasks available, pausing..', { tasks })
@@ -305,10 +301,10 @@ export class Api {
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
  * @param {WorkerOpts} opts
- * @param {import('redis').RedisClientType | IoRedis} redis
+ * @param {import('redis').RedisClientType | IoRedis} redisInstance
  */
-export const createWorker = async (store, redisPrefix, opts, redis) => {
-  const a = await createApiClient(store, redisPrefix, redis)
+export const createWorker = async (store, redisPrefix, opts, redisInstance) => {
+  const a = await createApiClient(store, redisPrefix, redisInstance)
   return new Worker(a, opts)
 }
 

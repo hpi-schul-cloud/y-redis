@@ -46,7 +46,7 @@ export class IoRedisAdapter {
      * @returns 
      */
     getEntriesLen(streamName) {
-       return this.redis.xlen(streamName)
+        return this.redis.xlen(streamName)
     }
 
     /**
@@ -65,7 +65,11 @@ export class IoRedisAdapter {
             this.redisWorkerGroupName,
             '0',
             'MKSTREAM'
-          )
+        )
+    }
+
+    async quit() {
+        return this.redis.quit()
     }
 
     /**

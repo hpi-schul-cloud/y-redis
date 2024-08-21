@@ -4,7 +4,7 @@ import * as t from 'lib0/testing'
 import { createClient } from 'redis'
 import * as Y from 'yjs'
 import * as api from '../../src/api.js'
-import { prevClients, store } from '../utils.js'
+import { prevClients, redisUrl, store } from '../utils.js'
 
 const redisPrefix = 'ytestsnoderedis'
 
@@ -14,14 +14,14 @@ const redisPrefix = 'ytestsnoderedis'
 const createTestCase = async tc => {
   await promise.all(prevClients.map(c => c.destroy()))
   prevClients.length = 0
-  const redisClient = createClient({ url: api.redisUrl })
+  const redisClient = createClient({ url: redisUrl })
   await redisClient.connect()
 
   // flush existing content
   const keysToDelete = await redisClient.keys(redisPrefix + ':*')
   keysToDelete.length > 0 && await redisClient.del(keysToDelete)
   await redisClient.quit()
-  const redis = createClient({ url: api.redisUrl })
+  const redis = createClient({ url: redisUrl })
   const client = await api.createApiClient(store, redisPrefix, redis)
   prevClients.push(client)
   const room = tc.testName
@@ -46,7 +46,7 @@ const createTestCase = async tc => {
 }
 
 const createWorker = async () => {
-  const redis = createClient({ url: api.redisUrl })
+  const redis = createClient({ url: redisUrl })
   const worker = await api.createWorker(store, redisPrefix, {}, redis)
   worker.client.redisMinMessageLifetime = 10000
   worker.client.redisTaskDebounce = 5000

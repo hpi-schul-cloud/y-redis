@@ -3,21 +3,21 @@ import { authServerStarted } from '../bin/auth-server-example.js'; // starts the
 
 import { runTests } from 'lib0/testing';
 import * as auth from './auth.tests.js';
-import * as api from './io-redis/api.tests.js';
-import * as ws from './io-redis/ws.tests.js';
-import * as napi from './node-redis/api.tests.js';
-import * as nws from './node-redis/ws.tests.js';
+import * as io_redis_api from './io-redis/api.tests.js';
+import * as io_redis_ws from './io-redis/ws.tests.js';
+import * as node_redis_api from './node-redis/api.tests.js';
+import * as node_redis_ws from './node-redis/ws.tests.js';
 import * as storage from './storage.tests.js';
 
 await authServerStarted
 
-runTests({
-  storage,
-  api,
-  napi,
+await runTests({
   auth,
-  ws,
-  nws
+  storage,
+  io_redis_api,
+  io_redis_ws,
+  node_redis_api,
+  node_redis_ws,
 }).then(success => {
   process.exit(success ? 0 : 1)
 })

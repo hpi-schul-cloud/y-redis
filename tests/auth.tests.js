@@ -11,7 +11,7 @@ export const testSampleAuthServer = async _tc => {
   const token = await fetch(utils.authTokenUrl).then(req => req.text())
   // verify that the user has a valid token
   const { payload: userToken } = await jwt.verifyJwt(utils.authPublicKey, token)
-  console.log('server created', { userToken })
+
   if (userToken.yuserid == null) {
     throw new Error('Missing userid in user token!')
   }
