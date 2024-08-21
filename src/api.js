@@ -17,8 +17,6 @@ import { NodeRedisAdapter } from './redis/node-redis.js'
 const logWorker = logging.createModuleLogger('@y/redis/api/worker')
 const logApi = logging.createModuleLogger('@y/redis/api')
 
-export const redisUrl = env.ensureConf('redis')
-
 /**
  * @param {string} a
  * @param {string} b
@@ -83,13 +81,19 @@ const decodeRedisRoomStreamName = (rediskey, expectedPrefix) => {
 /**
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
- * @param {import('redis').RedisClientType | IoRedis} redis
+ * @param {import('redis').RedisClientType | IoRedis} redisInstance
  */
-export const createApiClient = async (store, redisPrefix, redis) => {
-  const a = new Api(store, redisPrefix, redis)
+export const createApiClient = async (store, redisPrefix, redisInstance) => {
+  const a = new Api(store, redisPrefix, redisInstance)
   try {
     await a.redis.createGroup()
-  } catch (e) { }
+  } catch (e) {
+    // It is okay when the group already exists, so we can ignore this error.
+    if(!(e instanceof redis.ErrorReply) || e.message !== 'BUSYGROUP Consumer Group name already exists') {
+      throw e
+    }
+  }
+
   return a
 }
 
@@ -97,9 +101,9 @@ export class Api {
   /**
    * @param {import('./storage.js').AbstractStorage} store
    * @param {string} prefix
-   * @param {import('redis').RedisClientType | IoRedis} redis
+   * @param {import('redis').RedisClientType | IoRedis} redisInstance
    */
-  constructor(store, prefix, redis) {
+  constructor(store, prefix, redisInstance) {
     this.store = store
     this.prefix = prefix
     this.consumername = random.uuidv4()
@@ -115,12 +119,12 @@ export class Api {
     this.redisWorkerGroupName = this.prefix + ':worker'
     this._destroyed = false
 
-    if (redis instanceof IoRedis) {
+    if (redisInstance instanceof IoRedis) {
       /**
        * @type {IoRedisAdapter}
        */
-      this.redis = new IoRedisAdapter(redis, this.redisWorkerStreamName, this.redisWorkerGroupName)
-    } else if (redis instanceof Object) {
+      this.redis = new IoRedisAdapter(redisInstance, this.redisWorkerStreamName, this.redisWorkerGroupName)
+    } else if (redisInstance instanceof Object) {
       // @ts-ignore
       this.redis = new NodeRedisAdapter(redis, this.redisWorkerStreamName, this.redisWorkerGroupName)
     } else {
@@ -228,7 +232,7 @@ export class Api {
   /**
    * @param {WorkerOpts} opts
    */
-  async consumeWorkerQueue({ tryClaimCount = 5, updateCallback = async () => { } }) {
+  async consumeWorkerQueue({ tryClaimCount = 5, updateCallback = async () => {} }) {
     /**
      * @type {Array<{stream: string, id: string}>}
      */
@@ -239,6 +243,7 @@ export class Api {
     // @ts-ignore
     reclaimedTasks?.messages.forEach(m => {
       const stream = m?.message.compact
+      // @ts-ignore
       stream && tasks.push({ stream, id: m?.id })
     })
     if (tasks.length === 0) {
@@ -257,6 +262,8 @@ export class Api {
         // register a timeout anymore
         logWorker('requesting doc from store')
         const { ydoc, storeReferences, redisLastId, docChanged, awareness } = await this.getDoc(room, docid)
+
+        // awareness is destroyed here to avoid memory leaks, see: https://github.com/yjs/y-redis/issues/24
         awareness.destroy()
         logWorker('retrieved doc from store. redisLastId=' + redisLastId, ' storeRefs=' + JSON.stringify(storeReferences))
         const lastId = math.max(number.parseInt(redisLastId.split('-')[0]), number.parseInt(task.id.split('-')[0]))

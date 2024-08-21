@@ -4,7 +4,7 @@ import * as promise from 'lib0/promise'
 import * as t from 'lib0/testing'
 import * as Y from 'yjs'
 import * as api from '../../src/api.js'
-import { prevClients, store } from '../utils.js'
+import { prevClients, redisUrl, store } from '../utils.js'
 
 const redisPrefix = 'ytestsioredis'
 
@@ -14,12 +14,12 @@ const redisPrefix = 'ytestsioredis'
 const createTestCase = async tc => {
   await promise.all(prevClients.map(c => c.destroy()))
   prevClients.length = 0
-  const redisClient = new Redis(api.redisUrl)
+  const redisClient = new Redis(redisUrl)
   // flush existing content
   const keysToDelete = await redisClient.keys(redisPrefix + ':*')
   keysToDelete.length > 0 && await redisClient.del(keysToDelete)
   await redisClient.quit()
-  const redis = new Redis(api.redisUrl)
+  const redis = new Redis(redisUrl)
   const client = await api.createApiClient(store, redisPrefix, redis)
   prevClients.push(client)
   const room = tc.testName
@@ -45,7 +45,7 @@ const createTestCase = async tc => {
 }
 
 const createWorker = async () => {
-  const redis = new Redis(api.redisUrl)
+  const redis = new Redis(redisUrl)
   const worker = await api.createWorker(store, redisPrefix, {}, redis)
   worker.client.redisMinMessageLifetime = 10000
   worker.client.redisTaskDebounce = 5000

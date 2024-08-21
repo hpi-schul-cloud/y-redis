@@ -17,3 +17,7 @@ export const authDemoServerPort = 5173
 export const authDemoServerUrl = `http://localhost:${authDemoServerPort}`
 export const checkPermCallbackUrl = `${authDemoServerUrl}/auth/perm/`
 export const authTokenUrl = `${authDemoServerUrl}/auth/token`
+
+export const yredisPort = 9999
+export const yredisUrl = `ws://localhost:${yredisPort}/`
+export const redisUrl = env.ensureConf('redis')
