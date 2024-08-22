@@ -101,7 +101,7 @@ export class Api {
   /**
    * @param {import('./storage.js').AbstractStorage} store
    * @param {string} prefix
-   * @param {import('redis').RedisClientType | IoRedis} redisInstance
+   * @param {import('redis').RedisClientType | import('ioredis').Redis} redisInstance
    */
   constructor(store, prefix, redisInstance) {
     this.store = store
@@ -152,6 +152,7 @@ export class Api {
     streamReplyRes?.forEach((stream) => {
       res.push({
         stream: stream.name.toString(),
+        // @ts-ignore
         messages: protocol.mergeMessages(stream.messages.map(message => message.message.m).filter(m => m != null)),
         lastId: array.last(stream.messages).id.toString()
       })

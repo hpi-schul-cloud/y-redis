@@ -9,9 +9,13 @@ import { WebsocketProvider } from 'y-websocket'
 import * as Y from 'yjs'
 import * as api from '../../src/api.js'
 import { createYWebsocketServer } from '../../src/server.js'
-import { authPrivateKey, checkPermCallbackUrl, prevClients, redisUrl, store, yredisPort, yredisUrl } from '../utils.js'
+import { authPrivateKey, checkPermCallbackUrl, redisUrl, store, yredisPort, yredisUrl } from '../utils.js'
 
 const redisPrefix = 'ytestsnoderedis'
+/**
+ * @type {Array<{ destroy: function():Promise<void>}>}
+ */
+const prevClients = []
 
 const authToken = await jwt.encodeJwt(authPrivateKey, {
   iss: 'my-auth-server',
@@ -25,16 +29,15 @@ const authToken = await jwt.encodeJwt(authPrivateKey, {
  */
 const createWsClient = (tc, room) => {
   const ydoc = new Y.Doc()
-  const roomPrefix = tc.testName
+  const roomPrefix = tc.testName + "NODEREDIS"
   const provider = new WebsocketProvider(yredisUrl, roomPrefix + '-' + room, ydoc, { WebSocketPolyfill: /** @type {any} */ (WebSocket), disableBc: true, params: {}, protocols: [`yauth-${authToken}`] })
   return { ydoc, provider }
 }
 
 const createWorker = async () => {
-    const redis = createClient({ url: redisUrl })
+  const redisInstance = createClient({ url: redisUrl })
 
-
-  const worker = await api.createWorker(store, redisPrefix, {}, redis)
+  const worker = await api.createWorker(store, redisPrefix, {}, redisInstance)
   worker.client.redisMinMessageLifetime = 800
   worker.client.redisTaskDebounce = 500
   prevClients.push(worker.client)
@@ -42,10 +45,9 @@ const createWorker = async () => {
 }
 
 const createServer = async () => {
-    const redis = createClient({ url: redisUrl })
+  const redisInstance = createClient({ url: redisUrl })
 
-
-  const server = await createYWebsocketServer({ port: yredisPort, store: store, redisPrefix: redisPrefix, checkPermCallbackUrl: checkPermCallbackUrl, redis })
+  const server = await createYWebsocketServer({ port: yredisPort, store: store, redisPrefix: redisPrefix, checkPermCallbackUrl: checkPermCallbackUrl, redisInstance })
   prevClients.push(server)
   return server
 }
@@ -54,10 +56,10 @@ const createServer = async () => {
  * @returns 
  */
 const createApiClient = async () => {
-    const redis = createClient({ url: redisUrl })
+  const redisInstance = createClient({ url: redisUrl })
 
 
-  const client = await api.createApiClient(store, redisPrefix, redis)
+  const client = await api.createApiClient(store, redisPrefix, redisInstance)
   prevClients.push(client)
   return client
 }
@@ -69,6 +71,7 @@ const createTestCase = async tc => {
   await promise.all(prevClients.map(c => c.destroy()))
   prevClients.length = 0
   const redisClient = createClient({ url: redisUrl })
+  redisClient.connect()
   // flush existing content
   const keysToDelete = await redisClient.keys(redisPrefix + ':*')
   await redisClient.del(keysToDelete)
@@ -112,7 +115,7 @@ export const testSyncAndCleanup = async tc => {
   t.info('docs syncing (0)')
   await waitDocsSynced(doc1, doc2)
   t.info('docs synced (1)')
-  const docStreamExistsBefore = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + '-' + 'map', 'index', redisPrefix))
+  const docStreamExistsBefore = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + "NODEREDIS" + '-' + 'map', 'index', redisPrefix))
   t.assert(doc2.getMap().get('a') === 1)
   // doc3 can retrieve older changes from stream
   const { ydoc: doc3 } = createWsClient('map')
@@ -120,7 +123,7 @@ export const testSyncAndCleanup = async tc => {
   t.info('docs synced (2)')
   t.assert(doc3.getMap().get('a') === 1)
   await promise.wait(worker.client.redisMinMessageLifetime * 5)
-  const docStreamExists = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + '-' + 'map', 'index', redisPrefix))
+  const docStreamExists = await redisClient.exists(api.computeRedisRoomStreamName(tc.testName + "NODEREDIS" + '-' + 'map', 'index', redisPrefix))
   const workerLen = await redisClient.xLen(redisPrefix + ':worker')
   t.assert(!docStreamExists && docStreamExistsBefore)
   t.assert(workerLen === 0)
@@ -130,14 +133,14 @@ export const testSyncAndCleanup = async tc => {
   await waitDocsSynced(doc3, doc4)
   t.info('docs synced (3)')
   t.assert(doc3.getMap().get('a') === 1)
-  const memRetrieved = await store.retrieveDoc(tc.testName + '-' + 'map', 'index')
+  const memRetrieved = await store.retrieveDoc(tc.testName + "NODEREDIS" + '-' + 'map', 'index')
   t.assert(memRetrieved?.references.length === 1)
   t.info('doc retrieved')
   // now write another updates that the worker will collect
   doc1.getMap().set('a', 2)
   await promise.wait(worker.client.redisMinMessageLifetime * 2)
   t.assert(doc2.getMap().get('a') === 2)
-  const memRetrieved2 = await store.retrieveDoc(tc.testName + '-' + 'map', 'index')
+  const memRetrieved2 = await store.retrieveDoc(tc.testName + "NODEREDIS" + '-' + 'map', 'index')
   t.info('map retrieved')
   // should delete old references
   t.assert(memRetrieved2?.references.length === 1)

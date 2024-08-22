@@ -1,4 +1,3 @@
-import { Redis as IoRedis } from 'ioredis'
 import * as array from 'lib0/array'
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
@@ -89,7 +88,7 @@ class User {
  * called several times, until some content exists. So you need to handle concurrent calls.
  * @param {(ws:uws.WebSocket<User>)=>void} [conf.openWsCallback] - called when a websocket connection is opened
  * @param {(ws:uws.WebSocket<User>,code:number,message:ArrayBuffer)=>void} [conf.closeWsCallback] - called when a websocket connection is closed
- * @param {import('redis').RedisClientType | IoRedis} redisInstance
+ * @param {import('redis').RedisClientType | import('ioredis').Redis} redisInstance
  */
 export const registerYWebsocketServer = async (
   app,

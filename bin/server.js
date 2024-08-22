@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 import * as yredis from '@y/redis'
-import { Redis } from 'ioredis'
 import * as env from 'lib0/environment'
 import * as number from 'lib0/number'
+import * as redis from 'redis'
 
 const port = number.parseInt(env.getConf('port') || '3002')
 const redisPrefix = env.getConf('redis-prefix') || 'y'
@@ -12,7 +12,7 @@ const s3Endpoint = env.getConf('s3-endpoint')
 const checkPermCallbackUrl = env.ensureConf('AUTH_PERM_CALLBACK')
 
 const redisUrl = env.getConf('REDIS_URL') || 'redis://localhost:6379'
-const redisInstance = new Redis(redisUrl)
+const redisInstance = redis.createClient({ url: redisUrl })
 
 let store
 if (s3Endpoint) {

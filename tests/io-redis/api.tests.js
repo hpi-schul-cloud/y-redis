@@ -4,9 +4,14 @@ import * as promise from 'lib0/promise'
 import * as t from 'lib0/testing'
 import * as Y from 'yjs'
 import * as api from '../../src/api.js'
-import { prevClients, redisUrl, store } from '../utils.js'
+import { redisUrl, store } from '../utils.js'
 
 const redisPrefix = 'ytestsioredis'
+/**
+ * @type {Array<{ destroy: function():Promise<void>}>}
+ */
+const prevClients = []
+
 
 /**
  * @param {t.TestCase} tc
@@ -22,7 +27,7 @@ const createTestCase = async tc => {
   const redis = new Redis(redisUrl)
   const client = await api.createApiClient(store, redisPrefix, redis)
   prevClients.push(client)
-  const room = tc.testName
+  const room = tc.testName + "IOREDIS"
   const docid = 'main'
   const stream = api.computeRedisRoomStreamName(room, docid, redisPrefix)
   const ydoc = new Y.Doc()

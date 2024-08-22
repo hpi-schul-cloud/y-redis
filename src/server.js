@@ -28,7 +28,7 @@ class YWebsocketServer {
  * @param {string} [opts.redisPrefix]
  * @param {string} opts.checkPermCallbackUrl
  * @param {(room:string,docname:string,client:import('./api.js').Api)=>void} [opts.initDocCallback]
- * @param { import('ioredis').Redis } [opts.redis]
+ * @param {import('redis').RedisClientType | import('ioredis').Redis} opts.redisInstance
 * this is called when a doc is accessed, but it doesn't exist. You could populate the doc here.
  * However, this function could be called several times, until some content exists. So you need to
  * handle concurrent calls.
@@ -39,7 +39,7 @@ export const createYWebsocketServer = async ({
   store,
   checkPermCallbackUrl,
   initDocCallback = () => {},
-  redis
+  redisInstance
 }) => {
   checkPermCallbackUrl += checkPermCallbackUrl.slice(-1) !== '/' ? '/' : ''
   const app = uws.App({})
@@ -64,7 +64,7 @@ export const createYWebsocketServer = async ({
       console.error('Failed to pull permissions from', { permUrl })
       throw e
     }
-  }, { redisPrefix, initDocCallback }, redis)
+  }, { redisPrefix, initDocCallback }, redisInstance)
 
   await promise.create((resolve, reject) => {
     app.listen(port, (token) => {

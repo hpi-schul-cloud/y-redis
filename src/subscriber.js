@@ -1,4 +1,3 @@
-import { Redis as IoRedis } from 'ioredis'
 import * as array from 'lib0/array'
 import * as map from 'lib0/map'
 import * as api from './api.js'
@@ -34,7 +33,7 @@ const run = async subscriber => {
 /**
  * @param {import('./storage.js').AbstractStorage} store
  * @param {string} redisPrefix
- * @param {import('redis').RedisClientType | IoRedis} redisInstance
+ * @param {import('redis').RedisClientType | import('ioredis').Redis} redisInstance
  */
 export const createSubscriber = async (store, redisPrefix, redisInstance) => {
   const client = await api.createApiClient(store, redisPrefix, redisInstance)

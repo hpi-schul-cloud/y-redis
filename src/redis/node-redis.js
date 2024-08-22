@@ -48,7 +48,9 @@ export class NodeRedisAdapter {
                 return x
             }
         })
-        this.redis.connect()
+        if (!this.redis.isOpen) {
+            this.redis.connect()
+        }
     }
 
 

@@ -13,11 +13,11 @@ await authServerStarted
 
 await runTests({
   auth,
-  storage,
   io_redis_api,
-  io_redis_ws,
   node_redis_api,
+  io_redis_ws,
   node_redis_ws,
+  storage,
 }).then(success => {
   process.exit(success ? 0 : 1)
 })
