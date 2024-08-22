@@ -12,7 +12,7 @@ const s3Endpoint = env.getConf('s3-endpoint')
 const checkPermCallbackUrl = env.ensureConf('AUTH_PERM_CALLBACK')
 
 const redisUrl = env.getConf('REDIS_URL') || 'redis://localhost:6379'
-const redisInstance = redis.createClient({ url: redisUrl })
+const redisInstance = await redis.createClient({ url: redisUrl }).connect()
 
 let store
 if (s3Endpoint) {

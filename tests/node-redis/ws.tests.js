@@ -35,7 +35,7 @@ const createWsClient = (tc, room) => {
 }
 
 const createWorker = async () => {
-  const redisInstance = createClient({ url: redisUrl })
+  const redisInstance = await createClient({ url: redisUrl }).connect()
 
   const worker = await api.createWorker(store, redisPrefix, {}, redisInstance)
   worker.client.redisMinMessageLifetime = 800
@@ -45,7 +45,7 @@ const createWorker = async () => {
 }
 
 const createServer = async () => {
-  const redisInstance = createClient({ url: redisUrl })
+  const redisInstance = await createClient({ url: redisUrl }).connect()
 
   const server = await createYWebsocketServer({ port: yredisPort, store: store, redisPrefix: redisPrefix, checkPermCallbackUrl: checkPermCallbackUrl, redisInstance })
   prevClients.push(server)
@@ -56,8 +56,7 @@ const createServer = async () => {
  * @returns 
  */
 const createApiClient = async () => {
-  const redisInstance = createClient({ url: redisUrl })
-
+  const redisInstance = await createClient({ url: redisUrl }).connect()
 
   const client = await api.createApiClient(store, redisPrefix, redisInstance)
   prevClients.push(client)
@@ -71,7 +70,7 @@ const createTestCase = async tc => {
   await promise.all(prevClients.map(c => c.destroy()))
   prevClients.length = 0
   const redisClient = createClient({ url: redisUrl })
-  redisClient.connect()
+  await redisClient.connect()
   // flush existing content
   const keysToDelete = await redisClient.keys(redisPrefix + ':*')
   await redisClient.del(keysToDelete)
