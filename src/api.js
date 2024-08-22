@@ -124,7 +124,7 @@ export class Api {
        * @type {IoRedisAdapter | NodeRedisAdapter}
        */
       this.redis = new IoRedisAdapter(redisInstance, this.redisWorkerStreamName, this.redisWorkerGroupName)
-    } else if (redisInstance instanceof Object) {
+    } else if (redisInstance.constructor.name === 'Commander') {
       this.redis = new NodeRedisAdapter(redisInstance, this.redisWorkerStreamName, this.redisWorkerGroupName)
     } else {
       throw new Error('Invalid redis instance');
@@ -287,7 +287,9 @@ export class Api {
     this._destroyed = true
     try {
       await this.redis.quit()
-    } catch (e) { }
+    } catch (e) {
+      console.error(e)
+    }
   }
 }
 
