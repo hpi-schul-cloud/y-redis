@@ -144,7 +144,6 @@ export class Api {
 
     const streamReplyRes = await this.redis.readStreams(streams)
 
-
     /**
      * @type {{ stream: string; messages: Array<Uint8Array>; lastId: string; }[] | PromiseLike<{ stream: string; messages: Array<Uint8Array>; lastId: string; }[]>}
      */
@@ -317,15 +316,15 @@ export class Worker {
   constructor(client, opts) {
     this.client = client
     logWorker('Created worker process ', { id: client.consumername, prefix: client.prefix, minMessageLifetime: client.redisMinMessageLifetime })
-      ; (async () => {
-        while (!client._destroyed) {
-          try {
-            await client.consumeWorkerQueue(opts)
-          } catch (e) {
-            console.error(e)
-          }
+    ;(async () => {
+      while (!client._destroyed) {
+        try {
+          await client.consumeWorkerQueue(opts)
+        } catch (e) {
+          console.error(e)
         }
-        logWorker('Ended worker process ', { id: client.consumername })
-      })()
+      }
+      logWorker('Ended worker process ', { id: client.consumername })
+    })()
   }
 }

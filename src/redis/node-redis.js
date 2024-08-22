@@ -12,8 +12,8 @@ export class NodeRedisAdapter {
      */
     constructor(redis, redisWorkerStreamName, redisWorkerGroupName) {
         this.redisWorkerStreamName = redisWorkerStreamName,
-            this.redisWorkerGroupName = redisWorkerGroupName,
-            this.redis = redis
+        this.redisWorkerGroupName = redisWorkerGroupName,
+        this.redis = redis
         this.addMessageScript = node_redis.defineScript({
             NUMBER_OF_KEYS: 1,
             SCRIPT: addMessageCommand(this.redisWorkerStreamName, this.redisWorkerGroupName),
