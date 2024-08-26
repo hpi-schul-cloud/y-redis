@@ -191,8 +191,7 @@ export const registerYWebsocketServer = async (
         }
       } catch (error) {
         console.error(error)
-        // Schulcloud specific: This close code is currently used in our client for Internal Server Error
-        ws.end(4500)
+        ws.end(1011)
       }
     },
     message: (ws, messageBuffer) => {
@@ -227,8 +226,7 @@ export const registerYWebsocketServer = async (
         }
       } catch (error) {
         console.error(error)
-        // Schulcloud specific: This close code is currently used in our client for Internal Server Error
-        ws.end(4500)
+        ws.end(1011)
       }
     },
     close: (ws, code, message) => {
