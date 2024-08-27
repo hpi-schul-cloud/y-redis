@@ -13,7 +13,7 @@ const redisPrefix = 'ytestsnoderedis'
 const prevClients = []
 
 const createRedisInstance = async () => {
-  return createClient({ url: redisUrl })
+  return createClient({ url: redisUrl }).connect()
 }
 
 

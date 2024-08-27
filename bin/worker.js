@@ -9,7 +9,7 @@ const redisPrefix = env.getConf('redis-prefix') || 'y'
 const postgresUrl = env.getConf('postgres')
 const s3Endpoint = env.getConf('s3-endpoint')
 const redisUrl = env.getConf('REDIS_URL') || 'redis://localhost:6379'
-const createRedisInstance = async () => createClient({ url: redisUrl })
+const createRedisInstance = async () => createClient({ url: redisUrl }).connect();
 
 let store
 if (s3Endpoint) {
