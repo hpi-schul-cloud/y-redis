@@ -16,7 +16,7 @@ const redisPrefix = 'ytestsnoderedis'
  * @type {Array<{ destroy: function():Promise<void>}>}
  */
 const prevClients = []
-const createRedisInstance = () => {
+const createRedisInstance = async () => {
   return createClient({ url: redisUrl })
 }
 

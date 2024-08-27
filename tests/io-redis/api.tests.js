@@ -12,7 +12,7 @@ const redisPrefix = 'ytestsioredis'
  */
 const prevClients = []
 
-const createRedisInstance = () => {
+const createRedisInstance = async () => {
     return new Redis(redisUrl)
 }
 
