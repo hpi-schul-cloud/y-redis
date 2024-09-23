@@ -8,12 +8,12 @@ export class IoRedisAdapter {
     /**
      * 
      * @param { Redis } redis 
-     * @param { string } redisWorkerStreamName
-     * @param { string } redisWorkerGroupName
+     * @param { string } prefix
      */
-    constructor(redis, redisWorkerStreamName, redisWorkerGroupName) {
-        this.redisWorkerStreamName = redisWorkerStreamName
-        this.redisWorkerGroupName = redisWorkerGroupName
+    constructor(redis, prefix) {
+        this.redisDeleteStreamName = prefix + ':delete'
+        this.redisWorkerStreamName = prefix + ':worker'
+        this.redisWorkerGroupName = prefix + ':worker'
         this.redis = redis
 
         this.redis.defineCommand('addMessage', {
@@ -130,6 +130,20 @@ export class IoRedisAdapter {
         const reclaimedTasksRes = transformReply(reclaimedTasks)
 
         return reclaimedTasksRes
+    }
+
+    async getDeletedDocEntries() {
+        const deletedDocEntries = await this.redis.xrange(this.redisDeleteStreamName, '-', '+')
+        const transformedDeletedTasks = transformStreamMessagesReply(deletedDocEntries)
+        
+        return transformedDeletedTasks
+    }
+
+    /**
+     * @param {string} id
+     */
+    async deleteDeleteDocEntry(id) {
+        this.redis.xdel(this.redisDeleteStreamName, id)
     }
 
     /**

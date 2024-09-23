@@ -6,13 +6,13 @@ export class NodeRedisAdapter {
 
     /**
      * 
-     * @param { import('redis').RedisClientType } redis 
-     * @param { string } redisWorkerStreamName
-     * @param { string } redisWorkerGroupName
+     * @param { import('redis').RedisClientType } redis
+     * @param { string } prefix
      */
-    constructor(redis, redisWorkerStreamName, redisWorkerGroupName) {
-        this.redisWorkerStreamName = redisWorkerStreamName,
-        this.redisWorkerGroupName = redisWorkerGroupName,
+    constructor(redis, prefix) {
+        this.redisDeleteStreamName = prefix + ':delete'
+        this.redisWorkerStreamName = prefix + ':worker'
+        this.redisWorkerGroupName = prefix + ':worker'
         this.redis = redis
         this.addMessageScript = node_redis.defineScript({
             NUMBER_OF_KEYS: 1,
@@ -131,6 +131,19 @@ export class NodeRedisAdapter {
         )
 
         return reclaimedTasks
+    }
+
+    async getDeletedDocEntries() {
+        const deletedDocEntries = await this.redis.xRange(this.redisDeleteStreamName, '-', '+');
+        
+        return deletedDocEntries
+    }
+
+    /**
+     * @param {string} id
+     */
+    async deleteDeleteDocEntry(id) {
+        this.redis.xDel(this.redisDeleteStreamName, id)
     }
 
     /**

@@ -115,17 +115,15 @@ export class Api {
      * Minimum lifetime of y* update messages in redis streams.
      */
     this.redisMinMessageLifetime = number.parseInt(env.getConf('redis-min-message-lifetime') || '60000') // default: 1 minute
-    this.redisWorkerStreamName = this.prefix + ':worker'
-    this.redisWorkerGroupName = this.prefix + ':worker'
     this._destroyed = false
 
     if (redisInstance instanceof IoRedis) {
       /**
        * @type {IoRedisAdapter | NodeRedisAdapter}
        */
-      this.redis = new IoRedisAdapter(redisInstance, this.redisWorkerStreamName, this.redisWorkerGroupName)
+      this.redis = new IoRedisAdapter(redisInstance, this.prefix)
     } else if (redisInstance.constructor.name === 'Commander') {
-      this.redis = new NodeRedisAdapter(redisInstance, this.redisWorkerStreamName, this.redisWorkerGroupName)
+      this.redis = new NodeRedisAdapter(redisInstance, this.prefix)
     } else {
       throw new Error('Invalid redis instance');
     }
@@ -237,6 +235,10 @@ export class Api {
     const tasks = []
 
     const reclaimedTasks = await this.redis.reclaimTasks(this.consumername, this.redisTaskDebounce, tryClaimCount)
+    const deletedDocEntries = await this.redis.getDeletedDocEntries()
+    const deletedDocNames = deletedDocEntries?.map(entry => {
+      return entry.message.docName
+    })
 
     reclaimedTasks?.messages.forEach(m => {
       const stream = m?.message.compact
@@ -250,10 +252,17 @@ export class Api {
     logWorker('Accepted tasks ', { tasks })
     await promise.all(tasks.map(async task => {
       const streamlen = await this.redis.tryClearTask(task)
+      const { room, docid } = decodeRedisRoomStreamName(task.stream, this.prefix)
       if (streamlen === 0) {
         logWorker('Stream still empty, removing recurring task from queue ', { stream: task.stream })
+
+        const deleteEntryId = deletedDocEntries.find(entry => entry.message.docName === task.stream)?.id.toString()
+
+        if (deleteEntryId) {
+           this.redis.deleteDeleteDocEntry(deleteEntryId)
+           this.store.deleteDocument(room, docid)
+        }
       } else {
-        const { room, docid } = decodeRedisRoomStreamName(task.stream, this.prefix)
         // @todo, make sure that awareness by this.getDoc is eventually destroyed, or doesn't
         // register a timeout anymore
         logWorker('requesting doc from store')
@@ -270,8 +279,11 @@ export class Api {
           } catch (e) {
             console.error(e)
           }
+
           logWorker('persisting doc')
-          await this.store.persistDoc(room, docid, ydoc)
+          if(!deletedDocNames.includes(task.stream)) {
+            await this.store.persistDoc(room, docid, ydoc)
+          }
         }
         await promise.all([
           storeReferences && docChanged ? this.store.deleteReferences(room, docid, storeReferences) : promise.resolve(),
