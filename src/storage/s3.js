@@ -147,7 +147,7 @@ export class S3Storage {
    * @param {string} docname 
    */
   async deleteDocument(room, docname) {
-    const objNames = await this.client.listObjectsV2(this.bucketName, encodeS3ObjectName(room, docname, ''), true).toArray()
+		const objNames = await this.client.listObjectsV2(this.bucketName, encodeS3ObjectName(room, docname, ''), true).toArray()
 		const objectsList = objNames.map(obj => obj.name)
 
 		await this.client.removeObjects(this.bucketName, objectsList);
